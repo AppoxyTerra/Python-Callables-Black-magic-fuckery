@@ -1,5 +1,23 @@
 from typing import Any, Callable, Iterable, Self
 
+std__reversed = reversed
+
+class CallGroup:
+	""" This is a simple identifier/helper (to avoid confusion with functions that return tuples) """
+	def __init__(self, *elements):
+		self.elements = []
+		for i in elements:
+			if isinstance(i, CallGroup):
+				self.elements.extend(i.elements)
+			else:
+				self.elements.append(i)
+	# def __reversed__(self):
+	# 	return CallGroup(*reversed(self.elements))
+	# def __call__(self, *a, **k):
+	# 	return list(f(*a, **k) for f in self.elements)
+	# def __iter__(self):
+	# 	return iter(self.elements)
+
 class BetterCallables:
 	def __init__(self, *funcs: Callable):
 		self._funcs = funcs
@@ -11,27 +29,38 @@ class BetterCallables:
 	def __or__(self, __value: Any):
 		return __value(self)
 	def __ror__(self, __value: Any):
-		return self.__call__(__value)
+		if isinstance(__value, CallGroup):
+			ls = []
+			for element in __value.elements:
+				try:
+					ls.append(self.__call__(element))
+				except TypeError:
+					ls.append(element)
+			return ls
+		else:
+			return self.__call__(__value)
+	def __and__(self, __value: Any):
+		return CallGroup(self, __value)
 	def __rand__(self, __value: Any):
-		return self.__call__(__value)
+		return CallGroup(__value, self)
 	def __invert__(self):
 		return ExpandedCallable(self)
 	def __radd__(self, other: Self | Callable):
 		if isinstance(other, Callable):
 			other = BetterCallables(other)
-		return BetterCallables(*other._funcs, *self._funcs)
+		return BetterCallables(*self._funcs, *other._funcs)
 	def __add__(self, other: Self | Callable):
 		if isinstance(other, Callable):
 			other = BetterCallables(other)
-		return BetterCallables(*self._funcs, *other._funcs)
+		return BetterCallables(*other._funcs, *self._funcs)
 	def __call__(self, *__args, **__kwargs):
 		# stdout.write(f"CALL[{tuple(i.__name__ for i in self._funcs)}](" + ', '.join(str(i) for i in __args) + ')\n')
 		r = self._funcs[-1](*__args, **__kwargs)
-		for f in reversed(self._funcs[:-1]):
+		for f in std__reversed(self._funcs[:-1]):
 			r = f(r)
 		return r
 
-class ExpandedCallable:
+class ExpandedCallable(BetterCallables):
 	def __init__(self, func) -> None:
 		self._func = func
 	def __ror__(self, __value: Iterable[Any]):
@@ -41,20 +70,37 @@ class ExpandedCallable:
 print = BetterCallables(print)
 input = BetterCallables(input)
 call = BetterCallables(lambda x: x())
-map = BetterCallables(map)
+std__map = map
+@BetterCallables
+def map(func):
+	def map_wrapper(ls):
+		return std__map(func, ls)
+	return BetterCallables(map_wrapper)
+std__join = str.join
+@BetterCallables
+def join(join_str: str):
+	def join_wrapper(ls):
+		return std__join(join_str, ls)
+	return BetterCallables(join_wrapper)
 list = BetterCallables(list)
 sorted = BetterCallables(sorted)
+reversed = BetterCallables(reversed)
+def log(a):
+	print(a)
+	return a
 
-print("Commencons gentillement: Pas besoin de comprendre comment fonctionne BetterCallables")
-f1 = BetterCallables(lambda x: x*2)
-f2 = BetterCallables(lambda x: x+1)
-print( (f1 + f2)(5) ) # <=> f1(f2(5))
-print( (f2 + f1)(5) ) # <=> f2(f1(5))
-
-print(
-	"Puis on devient magicien,"\
-	"et les Monsieur 'A monad is a monoid in the category of endofuntors' (devs haskell) on peur:"
+# print(int & str.split + input | call)
+F = (
+	input
++	log
++	str.split
++	log
++	map(int)
++	log
++	sorted
++	log
++	map(str)
++	log
++	join('\n')
 )
-'Taper un liste d\'entiers:' | print
-(int, str.split + input | call) | ~map | sorted | list | print
-
+F() | print
