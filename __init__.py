@@ -1,3 +1,7 @@
+"""
+
+"""
+
 from typing import Any, Callable, Iterable, Self
 
 std__reversed = reversed
@@ -15,10 +19,10 @@ class CallGroup:
 	# 	return CallGroup(*reversed(self.elements))
 	# def __call__(self, *a, **k):
 	# 	return list(f(*a, **k) for f in self.elements)
-	# def __iter__(self):
-	# 	return iter(self.elements)
+	def __iter__(self):
+		return iter(self.elements)
 
-class BetterCallables:
+class BCall:
 	def __init__(self, *funcs: Callable):
 		self._funcs = funcs
 	def __repr__(self) -> str:
@@ -47,12 +51,12 @@ class BetterCallables:
 		return ExpandedCallable(self)
 	def __radd__(self, other: Self | Callable):
 		if isinstance(other, Callable):
-			other = BetterCallables(other)
-		return BetterCallables(*self._funcs, *other._funcs)
+			other = BCall(other)
+		return BCall(*self._funcs, *other._funcs)
 	def __add__(self, other: Self | Callable):
 		if isinstance(other, Callable):
-			other = BetterCallables(other)
-		return BetterCallables(*other._funcs, *self._funcs)
+			other = BCall(other)
+		return BCall(*other._funcs, *self._funcs)
 	def __call__(self, *__args, **__kwargs):
 		# stdout.write(f"CALL[{tuple(i.__name__ for i in self._funcs)}](" + ', '.join(str(i) for i in __args) + ')\n')
 		r = self._funcs[-1](*__args, **__kwargs)
@@ -60,47 +64,41 @@ class BetterCallables:
 			r = f(r)
 		return r
 
-class ExpandedCallable(BetterCallables):
+class ExpandedCallable(BCall):
 	def __init__(self, func) -> None:
 		self._func = func
 	def __ror__(self, __value: Iterable[Any]):
 		return self._func(*__value)
 
-# On transforme avec de la black-magic-fuckery quelques fonctions
-print = BetterCallables(print)
-input = BetterCallables(input)
-call = BetterCallables(lambda x: x())
+@BCall
+def transform_dct(dct: dict[str, Any]):
+	for k in dct:
+		if not (k.startswith('std__') or k.startswith('_')) and callable(dct[k]):
+			dct[k] = BCall(dct[k])
+def transform_globals():
+	transform_dct(globals())
+
+print = BCall(print)
+input = BCall(input)
+call = BCall(lambda x: x())
 std__map = map
-@BetterCallables
+@BCall
 def map(func):
 	def map_wrapper(ls):
 		return std__map(func, ls)
-	return BetterCallables(map_wrapper)
+	return BCall(map_wrapper)
 std__join = str.join
-@BetterCallables
+@BCall
 def join(join_str: str):
 	def join_wrapper(ls):
 		return std__join(join_str, ls)
-	return BetterCallables(join_wrapper)
-list = BetterCallables(list)
-sorted = BetterCallables(sorted)
-reversed = BetterCallables(reversed)
+	return BCall(join_wrapper)
+list = BCall(list)
+sorted = BCall(sorted)
+reversed = BCall(reversed)
 def log(a):
 	print(a)
 	return a
 
 # print(int & str.split + input | call)
-F = (
-	input
-+	log
-+	str.split
-+	log
-+	map(int)
-+	log
-+	sorted
-+	log
-+	map(str)
-+	log
-+	join('\n')
-)
-F() | print
+print(input & input | call)
